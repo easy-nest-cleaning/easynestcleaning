@@ -147,6 +147,11 @@
             value="table"
           >
           <input
+            type="hidden"
+            name="_captcha"
+            value="false"
+          >
+          <input
             type="text"
             name="_honey"
             style="display: none"
@@ -257,6 +262,13 @@
             Send Request →
           </button>
 
+          <div
+            id="en-result"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          ></div>
+
           <p class="small">
             We’ll use your details to respond to your cleaning request.
           </p>
@@ -353,11 +365,14 @@
 
   <script>
     (function () {
+      const form = document.getElementById("en-request");
+      const select = document.getElementById("en-service");
+      const button = form.querySelector('button[type="submit"]');
+      const result = document.getElementById("en-result");
+
       const service = new URLSearchParams(
         window.location.search
       ).get("service");
-
-      const select = document.getElementById("en-service");
 
       if (
         service &&
@@ -367,6 +382,88 @@
       ) {
         select.value = service;
       }
+
+      let sending = false;
+
+      form.addEventListener("submit", async function (event) {
+        event.preventDefault();
+
+        if (sending || !form.reportValidity()) return;
+
+        const data = new FormData(form);
+
+        if (String(data.get("_honey") || "").trim()) {
+          result.textContent =
+            "Unable to submit. Please contact us by phone or email.";
+          return;
+        }
+
+        data.set("_captcha", "false");
+        data.delete("_next");
+
+        sending = true;
+        button.disabled = true;
+        button.textContent = "Sending…";
+        form.setAttribute("aria-busy", "true");
+        result.textContent = "";
+
+        const fields = Array.from(
+          form.querySelectorAll("input, select, textarea")
+        );
+
+        fields.forEach(field => {
+          field.disabled = true;
+        });
+
+        const controller = new AbortController();
+        const timeout = setTimeout(
+          () => controller.abort(),
+          30000
+        );
+
+        try {
+          const response = await fetch(
+            "https://formsubmit.co/ajax/easynestcleaning@gmail.com",
+            {
+              method: "POST",
+              body: data,
+              headers: {
+                Accept: "application/json"
+              },
+              signal: controller.signal
+            }
+          );
+
+          const answer = await response.json();
+
+          if (
+            !response.ok ||
+            ![true, "true"].includes(answer.success)
+          ) {
+            throw new Error("Submission was not accepted.");
+          }
+
+          form.reset();
+
+          result.textContent =
+            "Thank you! Your cleaning request has been submitted. " +
+            "We’ll get in touch to discuss the details and availability.";
+        } catch (error) {
+          result.textContent =
+            "We couldn’t confirm your submission. Your details are " +
+            "still here. Please try again or call us at (917) 547-7215.";
+        } finally {
+          clearTimeout(timeout);
+          sending = false;
+          button.disabled = false;
+          button.textContent = "Send Request →";
+          form.removeAttribute("aria-busy");
+
+          fields.forEach(field => {
+            field.disabled = false;
+          });
+        }
+      });
     })();
   </script>
 </body>
